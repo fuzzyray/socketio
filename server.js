@@ -12,6 +12,11 @@ const cookieParser = require('cookie-parser');
 const app = express();
 const http = require('http').Server(app);
 const sessionStore = new session.MemoryStore();
+const io = require('socket.io')(http);
+const passportSocketIo = require('passport.socketio');
+
+const cors = require('cors');
+app.use(cors());
 
 fccTesting(app); //For FCC testing purposes
 
@@ -48,7 +53,34 @@ mongoClient.connect((err) => {
     http.listen(process.env.PORT || 3000);
 
     //start socket.io code
-
+    io.use(passportSocketIo.authorize({
+      cookieParser: cookieParser,
+      key: 'express.sid',
+      secret: process.env.SESSION_SECRET,
+      store: sessionStore,
+    }));
+    let currentUsers = 0;
+    io.on('connection', socket => {
+      console.log(`User: ${socket.request.user.name} connected`);
+      currentUsers++;
+      io.emit('user', {
+        name: socket.request.user.name,
+        currentUsers,
+        connected: true,
+      });
+      socket.on('chat message', (message) => {
+        io.emit('chat message', {name: socket.request.user.name, message});
+      });
+      socket.on('disconnect', () => {
+        console.log('User disconnected');
+        currentUsers--;
+        io.emit('user', {
+          name: socket.request.user.name,
+          currentUsers,
+          connected: false,
+        });
+      });
+    });
     //end socket.io code
   }
 });
